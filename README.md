@@ -18,4 +18,4 @@
 - Modrinth API / CurseForge API
 - Minecraft Launcher API (Mojang)
 
-## Скачать лаунчер можно в Releases
+## Скачать лаунчер можно в [Releases](https://github.com/Lentypro/kernel-launcher/releases/).
