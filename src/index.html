@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Kernel Launcher</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="titlebar">
+  <span class="logo">Kernel Launcher</span>
+  <div class="winctl">
+    <button id="btn-min">—</button>
+    <button id="btn-close">✕</button>
+  </div>
+</div>
+
+<div class="app">
+  <aside class="sidebar">
+    <button data-tab="play" class="active">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg> Играть
+    </button>
+    <button data-tab="instances">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg> Сборки
+    </button>
+    <button data-tab="catalog">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg> Каталог
+    </button>
+    <button data-tab="accounts">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Аккаунты
+    </button>
+    <button data-tab="settings">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> Настройки
+    </button>
+  </aside>
+
+  <main class="content">
+    <section id="tab-play" class="tab active">
+      <h1>Играть</h1>
+      <div class="row">
+        <select id="play-instance"></select>
+        <select id="play-account"></select>
+      </div>
+      <button id="btn-launch" class="primary big">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:8px"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        Запустить Minecraft
+      </button>
+      <pre id="launch-log"></pre>
+    </section>
+
+    <section id="tab-instances" class="tab">
+      <div class="row" style="justify-content: space-between; margin-bottom: 16px;">
+        <h1 style="margin:0">Сборки</h1>
+        <button id="btn-new-inst" class="primary">+ Создать</button>
+      </div>
+      <div class="row" style="margin-bottom: 16px;">
+        <button id="btn-import-mrpack">Импорт .mrpack</button>
+        <button id="btn-import-zip">Импорт .zip</button>
+      </div>
+      <div id="instances-list" class="grid"></div>
+    </section>
+
+    <section id="tab-catalog" class="tab">
+      <h1>Каталог</h1>
+      <div class="row">
+        <input id="cat-q" placeholder="Поиск...">
+        <select id="cat-type">
+          <option value="mod">Моды</option>
+          <option value="resourcepack">Ресурспаки</option>
+          <option value="shader">Шейдеры</option>
+          <option value="world">Карты (CF)</option>
+          <option value="datapack">Датапаки</option>
+          <option value="modpack">Сборки</option>
+        </select>
+        <select id="cat-source">
+          <option value="modrinth">Modrinth</option>
+          <option value="curseforge">CurseForge</option>
+        </select>
+        <select id="cat-instance"></select>
+      </div>
+      <div id="catalog-results" class="grid"></div>
+      <div class="pagination" id="cat-pagination" style="display:none">
+        <button id="btn-prev-page" disabled>◀ Назад</button>
+        <span id="page-info">Стр. 1</span>
+        <button id="btn-next-page">Вперед ▶</button>
+      </div>
+    </section>
+
+    <section id="tab-accounts" class="tab">
+      <h1>Аккаунты</h1>
+      <div class="card">
+        <h3>Оффлайн</h3>
+        <input id="off-nick" placeholder="Ник (3-16 символов)">
+        <button id="btn-off" class="primary">Добавить</button>
+      </div>
+      <div class="card">
+        <h3>Ely.by</h3>
+        <input id="ely-login" placeholder="Email / логин">
+        <input id="ely-pass" type="password" placeholder="Пароль">
+        <button id="btn-ely" class="primary">Войти</button>
+      </div>
+      <div class="card">
+        <h3>Microsoft</h3>
+        <button id="btn-ms" class="primary">Войти через Microsoft</button>
+      </div>
+      <div id="accounts-list"></div>
+    </section>
+
+    <section id="tab-settings" class="tab">
+      <h1>Настройки</h1>
+      <div class="card">
+        <label>Java path (пусто = авто)</label>
+        <input id="set-java" placeholder="C:\Program Files\Java\jdk-17\bin\javaw.exe">
+      </div>
+    </section>
+  </main>
+</div>
+
+<div id="modal-create" class="modal-bg" style="display:none">
+  <div class="modal">
+    <h2>Создание сборки</h2>
+    <div class="modal-form">
+      <label>Название</label>
+      <input id="c-name" placeholder="Моя сборка">
+      <label>Версия Minecraft</label>
+      <select id="c-mc"></select>
+      <label>Загрузчик модов</label>
+      <select id="c-loader">
+        <option value="vanilla">Vanilla</option>
+        <option value="fabric">Fabric</option>
+        <option value="forge">Forge</option>
+        <option value="quilt">Quilt</option>
+        <option value="neoforge">NeoForge</option>
+        <option value="liteloader">LiteLoader</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button onclick="document.getElementById('modal-create').style.display='none'">Отмена</button>
+      <button id="c-submit" class="primary">Создать</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-inst" class="modal-bg" style="display:none">
+  <div class="modal" style="width: 600px;">
+    <h2 id="modal-title">Настройки</h2>
+    <div class="modal-form grid-2">
+      <label>Иконка (Emoji или URL)</label>
+      <input id="m-icon" placeholder="🐉 или https://...">
+      <label>Группа</label>
+      <input id="m-group" placeholder="Без группы">
+      <label>ОЗУ (Мин / Макс MB)</label>
+      <div style="display:flex; gap:8px">
+        <input id="m-min-ram" type="number" value="1024" style="width:50%">
+        <input id="m-max-ram" type="number" value="4096" style="width:50%">
+      </div>
+      <label>Java path (пусто = глобальный)</label>
+      <input id="m-java" placeholder="Авто">
+      <label>JVM аргументы</label>
+      <input id="m-jvm" placeholder="-XX:+UseG1GC">
+      <label>Заметки</label>
+      <textarea id="m-notes" rows="3" style="grid-column:1/-1"></textarea>
+    </div>
+    <button id="m-open-folder" style="width:100%; margin-top:16px;">📂 Открыть папку игры</button>
+    <div class="modal-actions">
+      <button id="modal-cancel">Отмена</button>
+      <button id="modal-save" class="primary">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-confirm" class="modal-bg" style="display:none">
+  <div class="modal" style="width: 400px; text-align: center;">
+    <h2 id="confirm-title">Вы уверены?</h2>
+    <p id="confirm-desc" style="color: #8a90a3; margin-bottom: 24px; margin-top: 8px;"></p>
+    <div class="modal-actions" style="justify-content: center;">
+      <button id="confirm-cancel">Отмена</button>
+      <button id="confirm-ok" class="danger">Удалить</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast-container"></div>
+
+<div id="progress-toast">
+  <div id="p-text">Загрузка...</div>
+  <div class="p-bar-bg"><div id="p-bar-fill"></div></div>
+</div>
+
+<script src="renderer.js"></script>
+</body>
+</html>
