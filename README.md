@@ -17,3 +17,5 @@
 - Node.js
 - Modrinth API / CurseForge API
 - Minecraft Launcher API (Mojang)
+
+## Скачать лаунчер можно в Releases
