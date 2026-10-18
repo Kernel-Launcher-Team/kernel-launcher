@@ -2,7 +2,6 @@ const fs = require('fs');
 const path = require('path');
 const fetch = require('node-fetch');
 
-// Берем путь из main.js, иначе fallback
 const MC_DIR = process.env.KERNEL_GAME_DIR || path.join(__dirname, '..', 'game');
 const VERSIONS_DIR = path.join(MC_DIR, 'versions');
 const LIBS_DIR = path.join(MC_DIR, 'libraries');
