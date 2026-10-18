@@ -35,7 +35,6 @@ contextBridge.exposeInMainWorld('lmAPI', {
   onProgress: (cb) => ipcRenderer.on('progress', (_, data) => cb(data)),
   onGameClosed: (cb) => ipcRenderer.on('game:closed', () => cb()),
   
-  // Новые методы
   mods: {
     delete: (instance, filename, type) => ipcRenderer.invoke('mods:delete', instance, filename, type)
   },
