@@ -66,7 +66,6 @@ pre { background: #0f1116; padding: 12px; border-radius: 8px; font-size: 12px; m
 .p-bar-bg { height: 6px; background: #14161c; border-radius: 3px; overflow: hidden; }
 #p-bar-fill { height: 100%; width: 0%; background: #7c9cff; border-radius: 3px; transition: width 0.2s; }
 
-/* Круговой прогресс */
 .circle-btn { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; padding: 0; font-size: 14px; background: #2a3550; color: white; border: none; cursor: pointer; transition: background 0.2s; }
 .circle-btn:hover { background: #354365; }
 .circle-btn.danger { background: #8a2a2a; }
@@ -74,7 +73,6 @@ pre { background: #0f1116; padding: 12px; border-radius: 8px; font-size: 12px; m
 .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: #fff; border-radius: 50%; animation: spin 0.8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Уведомления */
 #toast-container { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 8px; z-index: 999; pointer-events: none; }
 .toast { background: #1a1d26; border: 1px solid #2a3550; color: #e6e8ee; padding: 12px 20px; border-radius: 8px; font-size: 14px; box-shadow: 0 4px 20px rgba(0,0,0,0.4); transition: opacity 0.3s; pointer-events: auto; text-align: center; min-width: 200px; }
 .toast.error { border-color: #8a2a2a; color: #f88; }
