@@ -1,21 +1,21 @@
 # Kernel Launcher 🚀
 
-**Kernel Launcher** — это легковесный, быстрый и многофункциональный лаунчер для Minecraft, написанный на Electron и Node.js. Он создан для тех, кто устал от тяжелых интерфейсов и хочет получить полный контроль над своими сборками, не жертвуя удобством.
+**Kernel Launcher** is a lightweight, fast, and feature-rich Minecraft launcher built with Electron and Node.js. It is designed for players who are tired of clunky interfaces and want full control over their instances without sacrificing convenience.
 
-## ✨ Основные возможности
+## ✨ Features
 
-- **Изоляция экземпляров (как в Prism Launcher):** Каждая сборка имеет свою собственную папку `.minecraft` с отдельными модами, конфигами и сохранениями. Никакого конфликта версий.
-- **Поддержка всех популярных лоадеров:** Fabric, Forge, Quilt, NeoForge и даже LiteLoader.
-- **Встроенный каталог модов:** Прямой поиск и установка модов, ресурспаков, шейдеров, датапаков и карт из **Modrinth** и **CurseForge** в один клик.
-- **Автоматические зависимости:** При установке мода (например, Xaero's Minimap) лаунчер сам подтянет и скачает нужные библиотеки.
-- **Авто-скачивание Java:** Лаунчер автоматически определяет требуемую версию Java для выбранной версии Minecraft и скачивает её, если её нет в системе.
-- **Пиратский мультиплеер и оффлайн:** Поддержка оффлайн-аккаунтов (без демо-режима) и интеграция с Ely.by для скинов и игры по сети.
-- **Портативность:** Лаунчер и все игровые файлы можно хранить в одной папке и носить на флешке.
+- **Instance Isolation (like Prism Launcher):** Each instance has its own `.minecraft` folder with separate mods, configs, and saves. No more mod conflicts.
+- **All Popular Mod Loaders:** Support for Fabric, Forge, Quilt, NeoForge, and even LiteLoader.
+- **Built-in Mod Catalog:** Search and install mods, resource packs, shaders, datapacks, and worlds from **Modrinth** and **CurseForge** in one click.
+- **Automatic Dependencies:** When installing a mod (e.g., Fabric API), the launcher automatically downloads the required libraries.
+- **Auto Java Downloader:** The launcher detects the required Java version for the selected Minecraft version and downloads it automatically if missing.
+- **Offline Mode & Skins:** Full support for offline accounts (no demo mode) and Ely.by integration for skins and multiplayer.
+- **Portable:** The launcher and all game files can be stored in a single folder and carried on a USB drive.
 
-## 🛠 Технологии
+## 🛠 Tech Stack
 - Electron
 - Node.js
 - Modrinth API / CurseForge API
 - Minecraft Launcher API (Mojang)
 
-## Скачать лаунчер можно в [Releases](https://github.com/Lentypro/kernel-launcher/releases/)
+## You can download the launcher in [Releases](https://github.com/Lentypro/kernel-launcher/releases/)
