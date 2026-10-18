@@ -152,7 +152,7 @@ window.openSettings = async (name) => {
   $('#m-notes').value = meta.notes;
   $('#modal-inst').style.display = 'flex';
 
-  // Кнопка открытия папки игры
+  
   $('#m-open-folder').onclick = () => api.shell.openFolder(name);
 };
 
