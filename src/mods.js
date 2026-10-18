@@ -123,7 +123,6 @@ async function installFromCurseForge({ instance, projectId, type, mcVersion }) {
   return { ok: true, file: match.fileName };
 }
 
-// ---------- УДАЛЕНИЕ ----------
 async function deleteMod(instance, filename, type) {
   const destMap = { mod: 'mods', resourcepack: 'resourcepacks', shader: 'shaderpacks', datapack: 'datapacks', world: 'saves' };
   const subdir = destMap[type] || 'mods';
@@ -136,7 +135,6 @@ async function deleteMod(instance, filename, type) {
   return { ok: false, error: 'Файл не найден' };
 }
 
-// ---------- ИМПОРТ ----------
 async function importMrpack(file, instanceName) {
   const zip = new AdmZip(file);
   const manifest = JSON.parse(zip.readAsText('modrinth.index.json'));
