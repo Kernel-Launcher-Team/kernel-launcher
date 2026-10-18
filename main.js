@@ -2,16 +2,13 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
-// Определяем базовую папку: если это собранный exe, берем папку рядом с ним. Иначе — корень проекта.
 const BASE_DIR = app.isPackaged ? path.dirname(app.getPath('exe')) : __dirname;
 const GAME_DIR = path.join(BASE_DIR, 'game');
 const DATA_DIR = path.join(BASE_DIR, 'data');
 
-// Создаем папки при старте
 if (!fs.existsSync(GAME_DIR)) fs.mkdirSync(GAME_DIR, { recursive: true });
 if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
 
-// Передаем пути в другие модули (через глобальные переменные или process.env)
 process.env.KERNEL_GAME_DIR = GAME_DIR;
 process.env.KERNEL_DATA_DIR = DATA_DIR;
 
@@ -49,12 +46,10 @@ app.on('window-all-closed', () => app.quit());
 ipcMain.handle('win:minimize', () => win.minimize());
 ipcMain.handle('win:close', () => win.close());
 
-// Авторизация
 ipcMain.handle('auth:microsoft', () => authMicrosoft(win));
 ipcMain.handle('auth:ely', (_, login, pass) => authEly(login, pass));
 ipcMain.handle('auth:offline', (_, nick) => authOffline(nick));
 
-// Установка
 ipcMain.handle('versions:install', async (_, versionId) => {
   try {
     const vjson = await installVersion(versionId, (progress) => {
@@ -78,7 +73,6 @@ ipcMain.handle('loader:install', async (_, args) => {
   } catch (e) { return { ok: false, error: e.message }; }
 });
 
-// Каталог
 ipcMain.handle('modrinth:search', (_, q, type, loader, mcVersion, page, limit) =>
   searchModrinth(q, type, loader, mcVersion, page, limit));
 ipcMain.handle('modrinth:install', (_, args) => installFromModrinth(args));
@@ -90,13 +84,11 @@ ipcMain.handle('cf:install', (_, args) => installFromCurseForge(args));
 ipcMain.handle('zip:import', (_, file, name) => importZipArchive(file, name));
 ipcMain.handle('mods:delete', (_, instance, filename, type) => deleteMod(instance, filename, type));
 
-// Сборки
 ipcMain.handle('instances:list', () => listInstances());
 ipcMain.handle('instances:create', (_, opts) => createInstance(opts));
 ipcMain.handle('instances:update', (_, name, patch) => updateInstance(name, patch));
 ipcMain.handle('instances:delete', (_, name) => deleteInstance(name));
 
-// Игра
 ipcMain.handle('game:launch', async (_, opts) => {
   try {
     if (gameProcess) return { ok: false, error: 'Игра уже запущена' };
