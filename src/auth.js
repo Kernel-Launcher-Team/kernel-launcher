@@ -5,12 +5,12 @@ function authOffline(nickname) {
   if (!/^[A-Za-z0-9_]{3,16}$/.test(nickname)) {
     throw new Error('Ник: 3-16 символов, только a-z A-Z 0-9 _');
   }
-  const uuid = crypto.createHash('md5').update('OfflinePlayer:' + nickname).digest('hex');
-  const uuidFmt = uuid.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
+  const raw = crypto.createHash('md5').update('OfflinePlayer:' + nickname).digest('hex');
+  const uuid = raw.replace(/(.{8})(.{4})(.{4})(.{4})(.{12})/, '$1-$2-$3-$4-$5');
   return {
     type: 'offline',
     name: nickname,
-    uuid: uuidFmt,
+    uuid,
     accessToken: '0'.repeat(32),
     clientToken: '0'.repeat(32)
   };
