@@ -3,63 +3,111 @@ const path = require('path');
 const { spawn } = require('child_process');
 const AdmZip = require('adm-zip');
 const fetch = require('node-fetch');
-const { MC_DIR, VERSIONS_DIR, LIBS_DIR, ASSETS_DIR, rulesAllow, osName } = require('./versions');
-const { INSTANCES_DIR } = require('./instances');
+const {
+  MC_DIR, VERSIONS_DIR, LIBS_DIR, ASSETS_DIR, rulesAllow, osName, libraryFiles,
+  ensureVersion, readVersionJson, installAssets, prepareLegacyAssets, downloadLibraries
+} = require('./versions');
+const { INSTANCES_DIR, updateInstance } = require('./instances');
+const { installLoader, findInstalledLoaderVersion } = require('./installers');
+const { getJavaPath } = require('./java');
+
+const SEP = process.platform === 'win32' ? ';' : ':';
 
 function replaceAll(str, map) {
-  for (const k of Object.keys(map)) str = str.split(k).join(map[k]);
-  return str;
+  let out = String(str);
+  for (const k of Object.keys(map)) out = out.split(k).join(map[k]);
+  return out;
 }
 
-async function getJavaPath(vjson, onProgress) {
-  const javaVer = vjson.javaVersion ? vjson.javaVersion.majorVersion : 8;
-  const javaBaseDir = path.join(MC_DIR, 'java');
-  const jreDir = path.join(javaBaseDir, `jre-${javaVer}`);
-  const javaExe = path.join(jreDir, 'bin', process.platform === 'win32' ? 'java.exe' : 'java');
+function isDemoArg(arg) {
+  if (!arg) return false;
+  const a = String(arg).toLowerCase();
+  return a === '--demo' || a === '-demo' || a === 'demo' || a.startsWith('--demo=');
+}
 
-  if (fs.existsSync(javaExe)) return javaExe;
+function libKey(lib) {
+  const p = lib.name.split('@')[0].split(':');
+  return `${p[0]}:${p[1]}:${p[3] || ''}`;
+}
 
-  onProgress({ text: `Скачиваем Java ${javaVer}...`, percent: 0 });
+function mergeLibraries(child, parent) {
+  const seen = new Set();
+  const out = [];
+  for (const lib of [...(child || []), ...(parent || [])]) {
+    if (!lib || !lib.name) continue;
+    const key = libKey(lib);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(lib);
+  }
+  return out;
+}
 
-  let downloadUrl = '';
-  if (javaVer === 21) downloadUrl = 'https://aka.ms/download-jdk/microsoft-jdk-21.0.3-windows-x64.zip';
-  else if (javaVer >= 22) downloadUrl = 'https://aka.ms/download-jdk/microsoft-jdk-25.0.0-windows-x64.zip'; 
-  else if (javaVer === 17) downloadUrl = 'https://aka.ms/download-jdk/microsoft-jdk-17.0.10-windows-x64.zip';
-  else return 'java'; 
+function mergeArguments(parent, child) {
+  const result = { jvm: [], game: [], legacy: null };
 
-  const zipPath = path.join(javaBaseDir, `jdk-${javaVer}.zip`);
-  fs.mkdirSync(javaBaseDir, { recursive: true });
-
-  const r = await fetch(downloadUrl);
-  if (!r.ok) throw new Error('Ошибка скачивания Java: ' + r.status);
-  
-  const fileStream = fs.createWriteStream(zipPath);
-  await new Promise((resolve, reject) => {
-    r.body.pipe(fileStream);
-    r.body.on('error', reject);
-    fileStream.on('finish', resolve);
-  });
-
-  onProgress({ text: `Распаковываем Java ${javaVer}...`, percent: 50 });
-
-  const zip = new AdmZip(zipPath);
-  zip.extractAllTo(javaBaseDir, true);
-  fs.unlinkSync(zipPath);
-
-  const extractedDirs = fs.readdirSync(javaBaseDir).filter(d => d.startsWith('jdk-'));
-  if (extractedDirs.length > 0) {
-    const extractedPath = path.join(javaBaseDir, extractedDirs[0]);
-    fs.renameSync(extractedPath, jreDir);
+  if (child.minecraftArguments && !child.arguments) {
+    result.legacy = child.minecraftArguments;
+    return result;
+  }
+  if (!child.arguments && parent && parent.minecraftArguments) {
+    result.legacy = parent.minecraftArguments;
+    return result;
   }
 
-  onProgress({ text: `Java ${javaVer} готова!`, percent: 100 });
-  return javaExe;
+  if (parent) {
+    if (parent.arguments) {
+      result.jvm.push(...(parent.arguments.jvm || []));
+      result.game.push(...(parent.arguments.game || []));
+    } else if (parent.minecraftArguments) {
+      result.game.push(...parent.minecraftArguments.split(' ').filter(Boolean));
+    }
+  }
+  if (child.arguments) {
+    result.jvm.push(...(child.arguments.jvm || []));
+    result.game.push(...(child.arguments.game || []));
+  }
+  return result;
+}
+
+function mergeVersions(vjson, parent) {
+  const pick = (key) => (vjson[key] !== undefined ? vjson[key] : parent ? parent[key] : undefined);
+  return {
+    id: vjson.id,
+    mainClass: vjson.mainClass || (parent && parent.mainClass),
+    assets: pick('assets'),
+    assetIndex: pick('assetIndex'),
+    type: pick('type') || 'release',
+    args: mergeArguments(parent, vjson),
+    libraries: mergeLibraries(vjson.libraries, parent && parent.libraries),
+    javaVersion: pick('javaVersion'),
+    jar: vjson.jar || vjson.inheritsFrom || vjson.id
+  };
+}
+
+function collectArgs(list, ctx) {
+  const out = [];
+  const osn = osName();
+  for (const a of list || []) {
+    if (typeof a === 'string') {
+      const arg = replaceAll(a, ctx);
+      if (arg.trim() !== '') out.push(arg);
+      continue;
+    }
+    if (!a || !rulesAllow(a.rules, osn)) continue;
+    const vals = Array.isArray(a.value) ? a.value : [a.value];
+    for (const v of vals) {
+      const arg = replaceAll(v, ctx);
+      if (arg.trim() !== '') out.push(arg);
+    }
+  }
+  return out;
 }
 
 async function ensureAuthlibInjector() {
   const authlibPath = path.join(MC_DIR, 'libraries', 'authlib-injector.jar');
-  if (fs.existsSync(authlibPath)) return authlibPath;
-  
+  if (fs.existsSync(authlibPath) && fs.statSync(authlibPath).size > 0) return authlibPath;
+
   const url = 'https://github.com/yushijinhun/authlib-injector/releases/download/v1.2.5/authlib-injector-1.2.5.jar';
   const r = await fetch(url);
   if (!r.ok) return null;
@@ -68,154 +116,163 @@ async function ensureAuthlibInjector() {
   return authlibPath;
 }
 
-function extractNatives(merged, nativesDir) {
+function extractNatives(libraries, nativesDir) {
   const osn = osName();
-  const classifierMap = { windows: 'natives-windows', osx: 'natives-macos', linux: 'natives-linux' };
-  const nativeClassifier = classifierMap[osn];
+  fs.rmSync(nativesDir, { recursive: true, force: true });
   fs.mkdirSync(nativesDir, { recursive: true });
-  
-  for (const lib of merged.libraries || []) {
-    if (!rulesAllow(lib.rules, osn)) continue;
-    let nativePath = null;
-    
-    if (lib.downloads && lib.downloads.classifiers) {
-      const key = Object.keys(lib.downloads.classifiers).find(k => k === nativeClassifier || k.startsWith(nativeClassifier));
-      if (key) nativePath = path.join(LIBS_DIR, lib.downloads.classifiers[key].path);
-    }
-    if (!nativePath && lib.natives && lib.natives[osn]) {
-      const cls = lib.natives[osn].replace('${arch}', process.arch === 'x64' ? '64' : '32');
-      const parts = lib.name.split(':');
-      const rel = `${parts[0].replace(/\./g, '/')}/${parts[1]}/${parts[2]}/${parts[1]}-${parts[2]}-${cls}.jar`;
-      nativePath = path.join(LIBS_DIR, rel);
-    }
-    if (!nativePath || !fs.existsSync(nativePath)) continue;
+  let extracted = 0;
 
-    try {
-      const zip = new AdmZip(nativePath);
-      zip.getEntries().forEach((entry) => {
-        if (entry.isDirectory || entry.entryName.startsWith('META-INF/')) return;
-        if (!/\.(dll|so|dylib)$/i.test(entry.entryName)) return;
-        fs.writeFileSync(path.join(nativesDir, path.basename(entry.entryName)), entry.getData());
-      });
-    } catch (e) { console.warn('Natives skip:', lib.name); }
+  for (const lib of libraries) {
+    if (!rulesAllow(lib.rules, osn)) continue;
+    for (const item of libraryFiles(lib, osn)) {
+      if (!item.extract) continue;
+      const jarPath = path.join(LIBS_DIR, item.rel);
+      if (!fs.existsSync(jarPath)) continue;
+      try {
+        const zip = new AdmZip(jarPath);
+        for (const entry of zip.getEntries()) {
+          if (entry.isDirectory) continue;
+          if (entry.entryName.startsWith('META-INF/')) continue;
+          if (!/\.(dll|so|dylib|jnilib)$/i.test(entry.entryName)) continue;
+          fs.writeFileSync(path.join(nativesDir, path.basename(entry.entryName)), entry.getData());
+          extracted++;
+        }
+      } catch (e) {
+        console.warn('[natives] failed to extract', jarPath, e.message);
+      }
+    }
   }
+  console.log(`[natives] extracted ${extracted} file(s) into ${nativesDir}`);
 }
 
-function buildClasspath(vjson, gameDir) {
+function buildClasspath(libraries, clientJar) {
   const osn = osName();
-  const sep = process.platform === 'win32' ? ';' : ':';
-  const entries = [path.join(VERSIONS_DIR, vjson.id, `${vjson.id}.jar`)];
-  
-  for (const lib of vjson.libraries || []) {
-    if (!rulesAllow(lib.rules, osn)) continue;
-    
-    const isNative = lib.natives && lib.natives[osn];
-    const hasNativeClassifier = lib.downloads && lib.downloads.classifiers && Object.keys(lib.downloads.classifiers).some(k => k.startsWith('natives-'));
-    if (isNative || hasNativeClassifier) continue;
+  const entries = [];
+  const seen = new Set();
+  const add = (p) => {
+    if (!p || seen.has(p) || !fs.existsSync(p)) return;
+    seen.add(p);
+    entries.push(p);
+  };
 
-    if (lib.downloads && lib.downloads.artifact && lib.downloads.artifact.path) {
-      const p = path.join(LIBS_DIR, lib.downloads.artifact.path);
-      if (fs.existsSync(p)) entries.push(p);
-    } else {
-      const parts = lib.name.split(':');
-      const rel = `${parts[0].replace(/\./g, '/')}/${parts[1]}/${parts[2]}/${parts[1]}-${parts[2]}.jar`;
-      const p = path.join(LIBS_DIR, rel);
-      if (fs.existsSync(p)) entries.push(p);
+  for (const lib of libraries) {
+    if (!rulesAllow(lib.rules, osn)) continue;
+    for (const item of libraryFiles(lib, osn)) {
+      if (item.classpath) add(path.join(LIBS_DIR, item.rel));
     }
   }
-  
-  entries.push(gameDir);
-  return entries.join(sep);
+  add(clientJar);
+  return entries;
 }
 
-async function launchGame({ instance, account, onProgress }) {
+function resolveClientJar(vjson, merged) {
+  const candidates = [vjson.jar, vjson.id, vjson.inheritsFrom, merged.jar].filter(Boolean);
+  for (const id of candidates) {
+    const p = path.join(VERSIONS_DIR, id, `${id}.jar`);
+    if (fs.existsSync(p) && fs.statSync(p).size > 0) return p;
+  }
+  return null;
+}
+
+async function resolveVersionId(meta, instanceName, onProgress) {
+  if (!meta.loader || meta.loader === 'vanilla') {
+    await ensureVersion(meta.mcVersion, onProgress);
+    return meta.mcVersion;
+  }
+
+  if (meta.versionId && readVersionJson(meta.versionId)) return meta.versionId;
+
+  let id = findInstalledLoaderVersion(meta.loader, meta.mcVersion, meta.loaderVersion);
+  if (!id) {
+    onProgress({ text: 'Installing mod loader...', percent: 10 });
+    const res = await installLoader({
+      loader: meta.loader, mcVersion: meta.mcVersion, version: meta.loaderVersion, onProgress
+    });
+    id = res.versionId;
+  }
+  try {
+    updateInstance(instanceName, { versionId: id });
+  } catch (e) {
+    console.warn('[launch] cannot save versionId', e.message);
+  }
+  return id;
+}
+
+async function launchGame({ instance, account, onProgress = () => {} }) {
   const instanceDir = path.join(INSTANCES_DIR, instance);
   const gameDir = path.join(instanceDir, '.minecraft');
   const meta = JSON.parse(fs.readFileSync(path.join(instanceDir, 'instance.json'), 'utf8'));
+  fs.mkdirSync(gameDir, { recursive: true });
 
-  let versionId = meta.versionId || meta.mcVersion;
-  let vjsonPath = path.join(VERSIONS_DIR, versionId, `${versionId}.json`);
-  if (!fs.existsSync(vjsonPath)) {
-    const all = fs.readdirSync(VERSIONS_DIR).filter((v) => v !== '_cache');
-    let found = null;
-    if (meta.loader && meta.loader !== 'vanilla') found = all.find((v) => v.toLowerCase().includes(meta.loader) && v.includes(meta.mcVersion));
-    if (!found) found = all.find((v) => v === meta.mcVersion);
-    if (!found) throw new Error('Версия не установлена');
-    versionId = found;
-    vjsonPath = path.join(VERSIONS_DIR, versionId, `${versionId}.json`);
+  const versionId = await resolveVersionId(meta, instance, onProgress);
+  const vjson = readVersionJson(versionId);
+  if (!vjson) throw new Error('Version files not found: ' + versionId);
+
+  let parent = null;
+  const baseId = vjson.inheritsFrom || (vjson.jar && vjson.jar !== vjson.id ? vjson.jar : null);
+  if (baseId) {
+    await ensureVersion(baseId, onProgress);
+    parent = readVersionJson(baseId);
   }
-  const vjson = JSON.parse(fs.readFileSync(vjsonPath, 'utf8'));
-  let parentJson = null;
-  if (vjson.inheritsFrom) {
-    const pPath = path.join(VERSIONS_DIR, vjson.inheritsFrom, `${vjson.inheritsFrom}.json`);
-    if (fs.existsSync(pPath)) parentJson = JSON.parse(fs.readFileSync(pPath, 'utf8'));
+
+  console.log('LAUNCHING VERSION:', versionId);
+
+  const merged = mergeVersions(vjson, parent);
+
+  onProgress({ text: 'Проверяем библиотеки...', percent: 20 });
+  await downloadLibraries(merged.libraries, (p) => onProgress({ text: p.text, percent: 20 + Math.round(p.percent * 0.3) }));
+
+  if (merged.assetIndex && merged.assetIndex.url) {
+    await installAssets(merged.assetIndex, (p) => onProgress({ text: p.text, percent: 50 + Math.round((p.percent || 0) * 0.4) }));
   }
-  
-  const merged = {
-    id: vjson.id, mainClass: vjson.mainClass || (parentJson && parentJson.mainClass),
-    assets: vjson.assets || (parentJson && parentJson.assets),
-    assetIndex: vjson.assetIndex || (parentJson && parentJson.assetIndex),
-    type: vjson.type || (parentJson && parentJson.type) || 'release',
-    arguments: vjson.arguments || (parentJson && parentJson.arguments),
-    minecraftArguments: vjson.minecraftArguments || (parentJson && parentJson.minecraftArguments),
-    libraries: [...((parentJson && parentJson.libraries) || []), ...(vjson.libraries || [])],
-    javaVersion: vjson.javaVersion || (parentJson && parentJson.javaVersion)
-  };
+
+  const assetIndexId = (merged.assetIndex && merged.assetIndex.id) || merged.assets || 'legacy';
+  const { gameAssets } = prepareLegacyAssets(assetIndexId, gameDir);
 
   const nativesDir = path.join(instanceDir, 'natives');
-  extractNatives(merged, nativesDir);
-  const classpath = buildClasspath(merged, gameDir);
+  extractNatives(merged.libraries, nativesDir);
+
+  const clientJar = resolveClientJar(vjson, merged);
+  if (!clientJar) throw new Error('Не найден jar клиента для версии ' + versionId);
+  const classpath = buildClasspath(merged.libraries, clientJar).join(SEP);
+
+  const isOffline = account.type === 'offline';
+  const accessToken = isOffline ? '0'.repeat(32) : account.accessToken;
+  const userType = isOffline ? 'legacy' : 'msa';
 
   const ctx = {
     '${auth_player_name}': account.name,
     '${version_name}': versionId,
     '${game_directory}': gameDir,
     '${assets_root}': ASSETS_DIR,
-    '${assets_index_name}': (merged.assetIndex && merged.assetIndex.id) || merged.assets || 'legacy',
+    '${game_assets}': gameAssets,
+    '${assets_index_name}': assetIndexId,
     '${auth_uuid}': account.uuid,
-    '${auth_access_token}': '0'.repeat(32),
-    '${user_type}': 'msa',
+    '${auth_access_token}': accessToken,
+    '${auth_session}': `token:${accessToken}:${account.uuid}`,
+    '${user_type}': userType,
     '${version_type}': merged.type,
     '${user_properties}': '{}',
     '${clientid}': 'kernel-launcher',
     '${auth_xuid}': '0',
     '${natives_directory}': nativesDir,
     '${launcher_name}': 'KernelLauncher',
-    '${launcher_version}': '1.0.0',
+    '${launcher_version}': '1.1.0',
     '${classpath}': classpath,
-    '${classpath_separator}': process.platform === 'win32' ? ';' : ':',
+    '${classpath_separator}': SEP,
     '${library_directory}': LIBS_DIR
   };
 
-  const jvmArgs = [];
-  if (merged.arguments && merged.arguments.jvm) {
-    for (const a of merged.arguments.jvm) {
-      if (typeof a === 'string') jvmArgs.push(replaceAll(a, ctx));
-      else if (rulesAllow(a.rules, osName())) {
-        const vals = Array.isArray(a.value) ? a.value : [a.value];
-        for (const v of vals) jvmArgs.push(replaceAll(v, ctx));
-      }
-    }
+  let jvmArgs;
+  let gameArgs;
+  if (merged.args.legacy) {
+    jvmArgs = [`-Djava.library.path=${nativesDir}`, '-cp', classpath];
+    gameArgs = merged.args.legacy.split(' ').filter(Boolean).map((s) => replaceAll(s, ctx)).filter((s) => s.trim() !== '');
   } else {
-    jvmArgs.push('-Djava.library.path=' + nativesDir, '-cp', classpath);
-  }
-
-  let gameArgs = [];
-  if (merged.arguments && merged.arguments.game) {
-    for (const a of merged.arguments.game) {
-      if (typeof a === 'string') {
-        if (a.toLowerCase().includes('demo')) continue;
-        gameArgs.push(replaceAll(a, ctx));
-      } else if (rulesAllow(a.rules, osName())) {
-        const hasDemoRule = a.rules && a.rules.some(r => r.features && r.features.is_demo_user === true);
-        if (hasDemoRule) continue;
-        const vals = Array.isArray(a.value) ? a.value : [a.value];
-        for (const v of vals) gameArgs.push(replaceAll(v, ctx));
-      }
-    }
-  } else {
-    const tpl = merged.minecraftArguments || '';
-    tpl.split(' ').forEach((s) => { if (s && !s.toLowerCase().includes('demo')) gameArgs.push(replaceAll(s, ctx)); });
+    jvmArgs = collectArgs(merged.args.jvm, ctx);
+    gameArgs = collectArgs(merged.args.game, ctx);
+    if (!jvmArgs.some((a) => a.startsWith('-Djava.library.path='))) jvmArgs.unshift(`-Djava.library.path=${nativesDir}`);
+    if (!jvmArgs.some((a) => a === '-cp' || a === '-classpath')) jvmArgs.push('-cp', classpath);
   }
 
   const extraJvm = meta.jvmArgs ? meta.jvmArgs.split(' ').filter(Boolean) : [];
@@ -223,53 +280,66 @@ async function launchGame({ instance, account, onProgress }) {
   const maxRam = meta.maxMemory || 4096;
   const minRam = meta.minMemory || 1024;
 
-  const allGameArgs = [...gameArgs, ...extraGame];
-  const filteredGameArgs = [];
-  let quickPlayAdded = false;
-  
-  for (let i = 0; i < allGameArgs.length; i++) {
-    const arg = allGameArgs[i];
-    if (arg.startsWith('--quickPlay')) {
-      if (!quickPlayAdded) {
-        filteredGameArgs.push(arg);
-        if (!arg.includes('=') && i + 1 < allGameArgs.length) {
-          filteredGameArgs.push(allGameArgs[i + 1]);
-          i++; 
-        }
-        quickPlayAdded = true;
-      } else if (!arg.includes('=') && i + 1 < allGameArgs.length) {
-        i++;
-      }
-    } else {
-      filteredGameArgs.push(arg);
-    }
-  }
-
-  let javaPath = meta.javaPath;
-  if (!javaPath) {
-    javaPath = await getJavaPath(merged, onProgress); 
-  }
+  const javaPath = await getJavaPath(
+    merged.javaVersion ? merged.javaVersion.majorVersion : 8, onProgress, meta.javaPath
+  );
 
   let authlibArg = [];
   if (account.type === 'ely') {
     const authlibPath = await ensureAuthlibInjector();
-    if (authlibPath) {
-      authlibArg = [`-javaagent:${authlibPath}=https://authserver.ely.by/api/authlib-injector`];
-    }
+    if (authlibPath) authlibArg = [`-javaagent:${authlibPath}=https://authserver.ely.by/api/authlib-injector`];
   }
 
-  const fullArgs = [
-    `-Xmx${maxRam}M`, `-Xms${minRam}M`, `-Djava.library.path="${nativesDir}"`,
-    ...authlibArg,
-    ...jvmArgs, ...extraJvm, merged.mainClass || 'net.minecraft.client.main.Main',
-    ...filteredGameArgs
-  ];
+  const mainClass = merged.mainClass || 'net.minecraft.client.main.Main';
 
-  const proc = spawn(javaPath, fullArgs, { cwd: gameDir, stdio: 'inherit' });
-  
+  const fullArgs = [
+    `-Xmx${maxRam}M`, `-Xms${minRam}M`,
+    ...authlibArg,
+    ...jvmArgs, ...extraJvm, mainClass,
+    ...gameArgs, ...extraGame
+  ].filter((a) => !isDemoArg(a));
+
+  console.log('EXECUTING JAVA WITH ARGS:', fullArgs.join(' '));
+
+  const logDir = path.join(gameDir, 'logs');
+  fs.mkdirSync(logDir, { recursive: true });
+  const logStream = fs.createWriteStream(path.join(logDir, 'kernel-launcher.log'), { flags: 'w' });
+  const tail = [];
+  const collect = (data) => {
+    logStream.write(data);
+    process.stdout.write(data);
+    for (const line of data.toString().split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      tail.push(line);
+      if (tail.length > 30) tail.shift();
+    }
+  };
+
+  const proc = spawn(javaPath, fullArgs, { cwd: gameDir, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  proc.stdout.on('data', collect);
+  proc.stderr.on('data', collect);
+  proc.on('close', () => logStream.end());
+
   return new Promise((resolve, reject) => {
-    proc.on('error', reject);
-    setTimeout(() => resolve({ pid: proc.pid, proc }), 1000);
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      resolve({ pid: proc.pid, proc });
+    }, 2500);
+
+    proc.on('error', (e) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(e);
+    });
+    proc.on('exit', (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new Error(`Minecraft завершился сразу (код ${code}).\n${tail.slice(-8).join('\n')}`));
+    });
   });
 }
 
